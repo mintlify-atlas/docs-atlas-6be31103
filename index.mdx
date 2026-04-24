@@ -1,97 +1,67 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "MITM-DomainFronting: Serverless Censorship Bypass"
+description: "Access blocked Google services without a VPN server using MITM and Domain Fronting through Xray-core. Works on Windows, Android, Linux, and macOS."
 ---
 
-## Setting up
+MITM-DomainFronting is an open-source technique that lets you access blocked internet services — particularly Google services — without any external VPN server. It works by intercepting your browser's TLS traffic locally (MITM), then re-forwarding it with a spoofed SNI using Domain Fronting through [Xray-core](https://github.com/XTLS/Xray-core).
 
-Get your documentation site up and running in minutes.
+<Warning>
+  This method does not restore full internet access. It currently enables access to specific Google services (Meet, Drive, etc.) from networks where they are restricted. Not all Google services are supported — some (like YouTube videos) have their own infrastructure and some (like Gemini) block Iranian IPs.
+</Warning>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="How it works" icon="diagram-project" href="/how-it-works">
+    Understand the MITM + Domain Fronting technique and why no server is needed.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Windows setup" icon="windows" href="/setup/windows">
+    Step-by-step guide to configure MITM-DomainFronting on Windows with v2rayN.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Android setup" icon="mobile" href="/setup/android">
+    Configure on Android without root using v2rayNG.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Certificate generation" icon="certificate" href="/setup/certificate-generation">
+    Generate your personal self-signed certificate required for the MITM step.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How it works at a glance
 
-Everything you need to create world-class documentation.
+MITM-DomainFronting intercepts your browser's HTTPS traffic locally, decrypts it using a trusted self-signed certificate you install, then re-encrypts and forwards it to Google's servers using a fake SNI — bypassing censorship filters that rely on SNI inspection.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Generate a personal certificate">
+    Create a self-signed CA certificate using the included `certificate_generator.bat` script or via an online tool. This certificate allows Xray to act as a local MITM proxy.
+  </Step>
+  <Step title="Install the certificate as trusted">
+    Import your certificate into your OS or browser as a Trusted Root CA so your browser accepts the locally-intercepted TLS connections.
+  </Step>
+  <Step title="Load the Xray configuration">
+    Import `MITM-DomainFronting.json` into v2rayN (Windows) or v2rayNG (Android) and activate it as the system proxy.
+  </Step>
+  <Step title="Browse freely">
+    Open your browser and access Google Meet, Drive, and other supported services directly — no external server required.
+  </Step>
+</Steps>
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="No server required" icon="server">
+    Works entirely locally — no cloud VPN server to pay for or maintain.
+  </Card>
+  <Card title="Native Xray-core support" icon="gear">
+    Built into Xray-core v26.2.6+. One JSON config file is all you need.
+  </Card>
+  <Card title="Cross-platform" icon="globe">
+    Runs on Windows, Linux, macOS, and Android (no root required).
+  </Card>
+  <Card title="Security-conscious design" icon="shield">
+    Uses your own personal certificate — never share certificates with others.
+  </Card>
+</CardGroup>
+
+## Security notice
+
+<Warning>
+  Always generate your own personal certificate. Never use a certificate provided by someone else, and never share your private key (`mycert.key`) with anyone. See the [Security Warnings](/reference/security-warnings) page for full details.
+</Warning>

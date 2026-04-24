@@ -1,0 +1,82 @@
+---
+title: "How MITM + Domain Fronting bypasses censorship"
+description: "A technical explanation of the MITM interception and Domain Fronting technique used to bypass SNI-based censorship without a remote VPN server."
+---
+
+MITM-DomainFronting bypasses SNI-based censorship by acting as a local TLS termination proxy. Xray-core intercepts your browser's encrypted connection, decrypts it using your self-signed certificate, then re-encrypts and forwards it to Google's servers with a spoofed SNI value. The censorship filter sees an SNI it allows (`www.google.com`) and passes the traffic through — no remote VPN server involved.
+
+## The problem: SNI-based censorship
+
+When your browser opens an HTTPS connection, it sends a TLS ClientHello message before any data is exchanged. This message includes the **Server Name Indication (SNI)** field — the plaintext domain name of the server your browser intends to reach. Censorship firewalls read this field in transit.
+
+Even if the destination IP address is reachable, the firewall can drop or reset the connection as soon as it sees a blocked domain name in the SNI. The IP-level connection succeeds; the domain-level SNI check fails. This is why simply connecting directly to Google's IP addresses is not enough — the domain name leaks in the TLS handshake.
+
+## The solution: MITM + domain fronting
+
+The technique combines two mechanisms:
+
+**1. MITM (man-in-the-middle) interception**
+
+Xray-core runs locally on your device and acts as a TLS termination proxy. Your browser is directed to trust your self-signed certificate (`mycert.crt`). When your browser opens an HTTPS connection to a Google service, Xray intercepts it on a local inbound port and decrypts the traffic using `mycert.crt` and `mycert.key`. At this point, Xray has access to the plaintext request.
+
+The config defines two local MITM inbound listeners for this purpose:
+
+- `tls-decrypt-h11` on port `11666` — handles HTTP/1.1 connections (`alpn: ["http/1.1"]`)
+- `tls-decrypt-h211` on port `11777` — handles HTTP/2 connections (`alpn: ["h2", "http/1.1"]`)
+
+Both use `dokodemo-door` protocol with TLS termination configured via your `mycert.crt` and `mycert.key` files.
+
+**2. Domain fronting**
+
+After decrypting your request, Xray re-encrypts it and sends it outbound to Google's servers — but with the SNI field replaced. Instead of the real domain (e.g., `meet.google.com`), the outbound TLS handshake advertises `www.google.com` as the SNI. The censorship filter sees this permitted SNI and allows the connection. Google's servers, which serve many domains on the same IP, receive the request and respond correctly based on the HTTP `Host` header inside the encrypted payload.
+
+The two outbound configurations for this are:
+
+- `tls-repack-google-h11` — re-encrypts with `serverName: "www.google.com"`, ALPN `http/1.1`, fingerprint `chrome`
+- `tls-repack-google-h211` — same spoofed SNI, ALPN `h2`/`http/1.1`, fingerprint `chrome`
+
+## Traffic flow
+
+<Steps>
+  <Step title="Browser sends request to mixed inbound (port 10808)">
+    Your browser uses Xray as a system proxy. All traffic enters through the `mixed-in` inbound on port `10808`. Sniffing is enabled with `destOverride: ["fakedns", "tls"]` to detect the destination domain and protocol from the TLS SNI field.
+  </Step>
+  <Step title="Routing evaluates the request">
+    The router checks the sniffed destination domain. Requests matching `geosite:google` are redirected to the local `tls-decrypt-h211` MITM listener via `redirect-out-h211` (pointing to `127.0.0.1:11777`). Requests matching `domain:googlevideo.com` are redirected to `tls-decrypt-h11` via `redirect-out-h11` (pointing to `127.0.0.1:11666`).
+  </Step>
+  <Step title="TLS terminated at local MITM inbound">
+    The redirected connection arrives at port `11666` or `11777`. Xray decrypts the TLS session using your `mycert.crt` and `mycert.key`, exposing the plaintext HTTP request.
+  </Step>
+  <Step title="Routing evaluates the decrypted request">
+    With the traffic now decrypted, the router re-evaluates it. The inbound tag (`tls-decrypt-h11` or `tls-decrypt-h211`) combined with the destination domain selects the appropriate outbound: `tls-repack-google-h11` or `tls-repack-google-h211`.
+  </Step>
+  <Step title="Re-encrypted with spoofed SNI and sent to Google">
+    Xray re-encrypts the request in a new TLS session using `serverName: "www.google.com"` as the SNI. The censorship filter inspects this SNI — `www.google.com` — and passes the connection. The traffic reaches Google's servers, which respond to the actual request based on the HTTP `Host` header inside the encrypted payload.
+  </Step>
+</Steps>
+
+<Note>
+  The `fakedns` DNS strategy in the config prevents DNS leaks by resolving domain names locally within Xray rather than sending plaintext DNS queries to external resolvers. The DNS server list falls back to `localhost` for non-Google traffic.
+</Note>
+
+## Why no server is needed
+
+Traditional VPN setups send all your traffic through a remote server in another country, which decrypts and forwards it on your behalf. MITM-DomainFronting removes this requirement entirely because:
+
+- Google's IP addresses are usually reachable from Iran — only the **domain name** is blocked by SNI inspection.
+- By replacing the SNI at the outbound, your device presents an SNI the filter allows, so the connection passes through.
+- Google's infrastructure serves multiple domains from the same IP addresses, so sending `www.google.com` as the SNI while requesting `meet.google.com` in the HTTP `Host` header works correctly.
+
+Your traffic goes directly from your device to Google's servers. Xray-core runs locally and handles only the TLS wrapping — no relay, no third-party server.
+
+## Limitations
+
+Not all Google services work with this method:
+
+- **Gemini** — Google blocks Iranian IP addresses at the IP level for this service. Spoofing the SNI does not help when the block is applied to the source IP.
+- **YouTube videos** — Video content on YouTube is served from `googlevideo.com` CDN infrastructure. The routing rules include `domain:googlevideo.com`, but video playback behavior depends on how the CDN routes requests and may not be fully functional.
+- **Non-browser apps on Android** — On non-rooted Android, only browsers respect the system proxy and trust user-installed certificates. Standalone apps typically bypass the proxy or reject user CA certificates.
+
+<Info>
+  The config's routing rules explicitly handle `domain:googlevideo.com` separately from `geosite:google`, routing them through the HTTP/1.1 path (`tls-decrypt-h11` / `tls-repack-google-h11`) rather than the HTTP/2 path used for main Google services.
+</Info>

@@ -1,0 +1,69 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "MITM-DomainFronting",
+  "projectDescription": "A serverless censorship circumvention technique that intercepts local TLS traffic via MITM and re-forwards it using Domain Fronting through Xray-core, enabling access to blocked services like Google without a VPN server.",
+  "theme": "aspen",
+  "primaryColor": "#3b7ed3",
+  "lightColor": "#92bcda",
+  "darkColor": "#dbecf4",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Setup",
+            "pages": [
+              "setup/certificate-generation",
+              "setup/windows",
+              "setup/android"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/xray-config",
+              "configuration/routing-rules",
+              "configuration/tls-mitm"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/supported-services",
+              "reference/security-warnings",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Serverless censorship bypass — no VPN server required",
+    "MITM-based local TLS interception using self-signed certificates",
+    "Domain Fronting with fake SNI to reach blocked services",
+    "Cross-platform support: Windows, Linux, macOS, Android (no root)",
+    "Integrated into Xray-core v26.2.6+ as a native feature",
+    "Access to Google services (Meet, Drive, etc.) from restricted networks",
+    "Happy Eyeballs dual-stack connectivity for reliability",
+    "Ad blocking via geosite routing rules"
+  ],
+  "publicApiSurface": [
+    "MITM-DomainFronting.json — Xray-core configuration file",
+    "certificate_generator.bat — Self-signed certificate generation script",
+    "mixed inbound (port 10808) — HTTP/SOCKS mixed proxy entry point",
+    "tls-decrypt-h11 inbound (port 11666) — HTTP/1.1 TLS MITM decryption",
+    "tls-decrypt-h211 inbound (port 11777) — HTTP/2 TLS MITM decryption",
+    "tls-repack-google-h11 outbound — Re-encrypt and domain-front for googlevideo.com",
+    "tls-repack-google-h211 outbound — Re-encrypt and domain-front for google services",
+    "fakedns — DNS strategy for traffic sniffing and routing"
+  ]
+}

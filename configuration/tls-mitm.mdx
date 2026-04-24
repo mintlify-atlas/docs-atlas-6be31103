@@ -1,0 +1,121 @@
+---
+title: "TLS MITM and Domain Fronting configuration"
+description: "How Xray-core performs local TLS MITM and Domain Fronting with a spoofed SNI. Covers certificate usage, dual ALPN pipelines (h11/h211), and Happy Eyeballs."
+---
+
+This page dives into the TLS-specific configuration — how Xray intercepts your browser's encrypted connections using a locally-trusted certificate, and how it re-establishes those connections to Google's servers with a spoofed SNI that bypasses censorship filters. Two separate pipelines handle different ALPN protocols, each optimized for the type of Google service it targets.
+
+## Certificate configuration for MITM
+
+The two MITM inbounds (`tls-decrypt-h11` and `tls-decrypt-h211`) both use the same TLS certificate configuration:
+
+```json
+"tlsSettings": {
+  "alpn": ["http/1.1"],
+  "certificates": [
+    {
+      "usage": "issue",
+      "certificateFile": "mycert.crt",
+      "keyFile": "mycert.key"
+    }
+  ]
+}
+```
+
+The critical field here is `"usage": "issue"`. This tells Xray to treat `mycert.crt` as a Certificate Authority (CA), not as a leaf certificate for a single domain. When your browser connects to `www.google.com`, Xray dynamically generates a new certificate for `www.google.com` on the fly and signs it with your CA key. Your browser validates that signature against your CA in its trust store — and accepts the connection as legitimate.
+
+<Warning>
+Generate your own `mycert.crt` and `mycert.key` using the provided `certificate_generator.bat` script (Windows) or a self-signed certificate tool. Never use a certificate file obtained from another person. Never share your `.key` file with anyone. These files give whoever holds them the ability to impersonate any HTTPS site on your device.
+</Warning>
+
+You must install `mycert.crt` into your operating system's or browser's trusted root certificate store before the MITM can work. See the setup instructions for your platform for the exact steps.
+
+## Domain Fronting outbound TLS
+
+After the MITM inbound decrypts the traffic, one of two re-packing outbounds re-encrypts it for Google's servers. Here is the full TLS configuration for `tls-repack-google-h211`:
+
+```json
+{
+  "tag": "tls-repack-google-h211",
+  "protocol": "direct",
+  "settings": {
+    "redirect": "google-main-services.redirect:443"
+  },
+  "streamSettings": {
+    "security": "tls",
+    "tlsSettings": {
+      "serverName": "www.google.com",
+      "verifyPeerCertByName": "fromMitM,www.google.com,dns.google,www.googlevideo.com,www.youtube.com",
+      "alpn": ["h2", "http/1.1"],
+      "fingerprint": "chrome"
+    },
+    "sockopt": {
+      "domainStrategy": "ForceIP",
+      "happyEyeballs": {
+        "tryDelayMs": 300,
+        "prioritizeIPv6": false,
+        "interleave": 2,
+        "maxConcurrentTry": 20
+      }
+    }
+  }
+}
+```
+
+**`serverName: "www.google.com"`** — This is the SNI value placed in the TLS `ClientHello` message that Xray sends to Google's server. Censorship infrastructure reads SNI to decide whether to block a connection. Because `www.google.com` is an allowed domain, the filter passes the connection through — even though the actual content being accessed may be a different Google service. This is Domain Fronting.
+
+**`verifyPeerCertByName`** — Xray verifies that the certificate returned by Google's server matches one of these names: `fromMitM`, `www.google.com`, `dns.google`, `www.googlevideo.com`, or `www.youtube.com`. The special value `fromMitM` tells Xray to also accept the certificate name that was originally requested by the browser (before interception). This prevents a man-in-the-middle attack on Xray itself — you are fronting Google, but you are also confirming you are actually talking to Google.
+
+**`fingerprint: "chrome"`** — Xray constructs its TLS `ClientHello` to match Chrome's known TLS fingerprint (cipher suites, extensions, elliptic curves). Some servers and DPI systems detect and block connections based on unusual TLS fingerprints; using Chrome's fingerprint avoids this.
+
+**`alpn: ["h2", "http/1.1"]`** — Xray advertises support for both HTTP/2 and HTTP/1.1 during TLS handshake. Google's servers prefer HTTP/2 when available, which gives better performance through multiplexing.
+
+## Happy Eyeballs connectivity
+
+Both re-packing outbounds and the `direct` outbound use Happy Eyeballs to maximize connection speed:
+
+```json
+"sockopt": {
+  "domainStrategy": "ForceIP",
+  "happyEyeballs": {
+    "tryDelayMs": 300,
+    "prioritizeIPv6": false,
+    "interleave": 2,
+    "maxConcurrentTry": 20
+  }
+}
+```
+
+Happy Eyeballs (RFC 8305) races multiple connection attempts in parallel so you connect via whichever IP responds first, rather than waiting for each attempt to time out sequentially.
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `domainStrategy` | `"ForceIP"` | Always resolve the domain to an IP before dialing — required for Happy Eyeballs to work |
+| `tryDelayMs` | `300` | Wait 300 ms before starting each additional parallel attempt |
+| `prioritizeIPv6` | `false` | Try IPv4 addresses first |
+| `interleave` | `2` | Alternate between IPv4 and IPv6 candidates every 2 addresses |
+| `maxConcurrentTry` | `20` | Allow up to 20 simultaneous connection attempts |
+
+With up to 20 concurrent attempts and a 300 ms stagger, Xray aggressively finds the fastest available path to Google's anycast infrastructure.
+
+## ALPN split: h11 vs h211
+
+There are two separate MITM pipelines rather than one because different Google services negotiate different TLS protocols, and mixing them in a single pipeline causes negotiation failures.
+
+**h11 pipeline** (`tls-decrypt-h11` → `tls-repack-google-h11`)
+
+- ALPN: `http/1.1` only
+- Target: `googlevideo.com` — YouTube and Google Video streaming
+- Video streaming uses large sequential HTTP/1.1 requests that work well without HTTP/2 multiplexing. Restricting to HTTP/1.1 avoids unnecessary complexity for this traffic type.
+
+**h211 pipeline** (`tls-decrypt-h211` → `tls-repack-google-h211`)
+
+- ALPN: `h2`, `http/1.1`
+- Target: `geosite:google` — Google Meet, Drive, Docs, and other main services
+- These services make many small concurrent requests (API calls, polling, real-time updates) where HTTP/2 multiplexing over a single connection significantly reduces overhead and latency.
+
+<Tip>
+If you add support for a new service in the future, decide which pipeline it belongs to based on its traffic pattern: video or large sequential downloads go to h11, interactive or API-heavy services go to h211.
+</Tip>
+
+The DNS entry `google-main-services.redirect → 216.239.38.120` specifically supports the h211 pipeline by giving it a fixed Google anycast IP to connect to, ensuring the `redirect` setting in `tls-repack-google-h211` resolves reliably without a live DNS lookup at connection time.

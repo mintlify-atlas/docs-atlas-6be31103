@@ -1,0 +1,67 @@
+---
+title: "Install and configure MITM-DomainFronting on Android"
+description: "Configure MITM-DomainFronting on non-rooted Android using v2rayNG in six steps. Works with Chromium-based browsers; Firefox requires extra configuration."
+---
+
+This page walks you through setting up MITM-DomainFronting on Android using v2rayNG. No root access is required. After completing these steps, you can use supported Google services directly through Chrome or any Chromium-based browser.
+
+<Note>
+On non-rooted Android, only browsers can use this method. Standalone apps typically cannot route traffic through the MITM proxy.
+</Note>
+
+<Note>
+You need `mycert.crt` and `mycert.key` before continuing. You can transfer them from a Windows setup or generate them online. See [Generate your personal TLS certificate](/setup/certificate-generation).
+</Note>
+
+<Steps>
+  <Step title="Install v2rayNG">
+    Download the latest release APK from [https://github.com/2dust/v2rayNG/releases](https://github.com/2dust/v2rayNG/releases) and install it on your device.
+  </Step>
+  <Step title="Obtain your certificate files">
+    Choose one of the following:
+
+    - Transfer `mycert.crt` and `mycert.key` from your Windows setup to your Android device.
+    - Generate them online at [https://regery.com/en/security/ssl-tools/self-signed-certificate-generator](https://regery.com/en/security/ssl-tools/self-signed-certificate-generator), then rename the downloaded files to `mycert.crt` and `mycert.key`.
+  </Step>
+  <Step title="Import certificate files into v2rayNG">
+    Open v2rayNG, go to **Asset files**, and import both `mycert.crt` and `mycert.key`.
+  </Step>
+  <Step title="Install the certificate as a trusted root on Android">
+    Navigate to:
+
+    **Settings** → **Security and privacy** → **More security settings** → **Install from device storage** → **CA Certificate** → **Install anyway** → select `mycert.crt` from your storage.
+
+    To verify the certificate was installed successfully, go to:
+
+    **Settings** → **Security and privacy** → **More security settings** → **View security certificates** → **User**
+
+    Your certificate should appear in the list.
+
+    <Note>
+    The exact menu paths may differ slightly depending on your device manufacturer and Android version.
+    </Note>
+  </Step>
+  <Step title="Import the Xray configuration">
+    In v2rayNG, tap **Import from locally** and select `MITM-DomainFronting.json`.
+
+    Also verify that **Enable Hev TUN FEATURE** is enabled in v2rayNG settings before running the configuration.
+  </Step>
+  <Step title="Start the VPN and browse">
+    Run the configuration in v2rayNG. Open Chrome or any Chromium-based browser to use supported services.
+  </Step>
+</Steps>
+
+<AccordionGroup>
+  <Accordion title="Using Firefox on Android?">
+    Firefox does not use the Android system certificate store by default. To enable it:
+
+    1. Open Firefox → **Settings** → **About Firefox**.
+    2. Tap the Firefox logo five times to unlock secret settings.
+    3. Navigate to **Settings** → **Secret Settings**.
+    4. Toggle **Use third party CA certificates** on.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+Do not use certificate files from others. Do not share your `mycert.key` with anyone.
+</Warning>

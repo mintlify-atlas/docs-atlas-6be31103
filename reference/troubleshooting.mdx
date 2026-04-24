@@ -1,0 +1,58 @@
+---
+title: "Troubleshooting MITM-DomainFronting issues"
+description: "Fix common MITM-DomainFronting issues: certificate trust errors, services not loading, wrong core type, Android browser problems, and version requirements."
+---
+
+This page covers common issues you might encounter when setting up or using MITM-DomainFronting, along with the most likely causes and steps to resolve them. Work through the relevant section below before opening an issue on GitHub.
+
+<AccordionGroup>
+  <Accordion title="Browser shows a certificate warning / ERR_CERT_AUTHORITY_INVALID">
+    **Cause:** The certificate is not installed as a trusted root CA in the correct store.
+
+    **Fix:** Re-follow the certificate installation steps.
+
+    - **Windows (system-wide):** Right-click `mycert.crt` → **Install Certificate** → **Local Machine** → **Place all certificates in the following store** → select **Trusted Root Certification Authorities** → confirm. Do not install to the Current User store — it will not work system-wide.
+    - **Windows (Chrome):** Go to **Settings** → **Privacy and security** → **Security** → **Manage certificates** → **Trusted Root Certification Authorities** → **Import** → select `mycert.crt` → **Place all certificates in the following store** → **Trusted Root Certification Authorities**.
+  </Accordion>
+
+  <Accordion title="Google services are not loading after setup">
+    Check each of the following in order:
+
+    1. **v2rayN is not running or system proxy is not active.** Open v2rayN, select your config, and choose **Set system proxy**. Verify the tray icon shows the proxy is active.
+    2. **Wrong core type.** In v2rayN, open the custom config and make sure **Core type** is set to **xray**, not v2fly. The MITM feature is Xray-specific.
+    3. **Xray version too old.** The config requires a minimum Xray version of `26.2.6` (set via `"version": { "min": "26.2.6" }` in the config). Update your Xray core if needed.
+    4. **Socks port field is not empty.** In v2rayN's custom config dialog, the **Socks port** field must be left empty. Filling it in conflicts with the inbound settings defined in the config file.
+  </Accordion>
+
+  <Accordion title="YouTube videos don't load">
+    This is expected behavior. YouTube video delivery uses `googlevideo.com` CDN infrastructure, which has its own separate systems. The HTTP/1.1 pipeline in this config handles `googlevideo.com` routing, but full YouTube video streaming is not guaranteed or fully supported with this method. This is a known limitation of the technique.
+  </Accordion>
+
+  <Accordion title="Gemini / AI Studio is not accessible">
+    Gemini blocks Iranian IP addresses directly at the IP level, not via SNI filtering. Domain Fronting is a technique for bypassing SNI-based censorship — it has no effect on IP-level blocks. This cannot be fixed with this method. See [Supported services](/reference/supported-services) for the full list of limitations.
+  </Accordion>
+
+  <Accordion title="On Android, the Google Meet / Drive app doesn't work">
+    On non-rooted Android, only browsers (Chrome and Chromium-based browsers) can use this proxy. Standalone apps such as the Google Meet app and Google Drive app typically bypass the VPN tunnel used for TLS inspection. This is an Android limitation for non-rooted devices.
+
+    **Workaround:** Open Google Meet or Google Drive in your browser (Chrome is recommended) instead of using the dedicated app.
+  </Accordion>
+
+  <Accordion title="Firefox on Android shows certificate errors">
+    Firefox on Android uses its own certificate store by default and does not trust user-installed CA certificates without additional configuration.
+
+    **Fix:** In Firefox on Android, go to **Settings** → **About Firefox** → tap the Firefox logo five times → navigate to **Settings** → **Secret Settings** → toggle on **Use third party CA certificates**. Restart Firefox and try again.
+  </Accordion>
+
+  <Accordion title="v2rayNG: Hev TUN FEATURE issue">
+    If traffic does not appear to be routed through the proxy on Android, check that **Enable Hev TUN FEATURE** is toggled on in v2rayNG settings. Without this, traffic interception on Android may not work correctly and services will appear to load as if the proxy is not active.
+  </Accordion>
+
+  <Accordion title="The method stopped working after a period of time">
+    Google occasionally updates its infrastructure, which can affect how Domain Fronting routes traffic. If the method worked previously but has stopped, check the [GitHub repository](https://github.com/patterniha/MITM-DomainFronting) for updated config files, announcements, or open issues from other users reporting the same behavior.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  If your issue is not listed here, check the [GitHub repository issues page](https://github.com/patterniha/MITM-DomainFronting/issues) for community solutions and previously reported problems.
+</Note>

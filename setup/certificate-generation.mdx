@@ -1,0 +1,44 @@
+---
+title: "Generate a personal self-signed TLS certificate"
+description: "Create a self-signed CA certificate required for the MITM step. Use the included batch script on Windows or generate one online for Android setup."
+---
+
+Xray acts as a local TLS proxy to intercept and re-encrypt traffic. To do this, it needs a CA certificate that your browser or operating system trusts. You must generate your own certificate — using someone else's certificate gives them the ability to decrypt your traffic.
+
+<Warning>
+Never use a certificate (`.crt`) from someone else. Never share your private key (`.key`) with anyone. Always generate your own personal certificate.
+</Warning>
+
+## Two ways to generate a certificate
+
+<Tabs>
+  <Tab title="Windows (batch script)">
+    1. Download the latest `v2rayN-windows-64.zip` from [https://github.com/2dust/v2rayN/releases](https://github.com/2dust/v2rayN/releases) and extract it.
+    2. Copy `certificate_generator.bat` into the `v2rayN-windows-64\bin` folder.
+    3. Run `certificate_generator.bat` from inside that folder (double-click or run from a terminal).
+    4. Wait for the script to finish. It runs the following command using the bundled Xray binary:
+
+    ```bat certificate_generator.bat
+    xray\xray.exe tls cert -ca -file=mycert
+    ```
+
+    When complete, two files appear in the same folder: `mycert.crt` and `mycert.key`.
+  </Tab>
+  <Tab title="Online generator (any platform)">
+    1. Visit [https://regery.com/en/security/ssl-tools/self-signed-certificate-generator](https://regery.com/en/security/ssl-tools/self-signed-certificate-generator).
+    2. Enter any domain name you choose (the value does not need to be real).
+    3. Download both the `.crt` and `.key` files provided by the site.
+    4. Rename the `.crt` file to `mycert.crt` and the `.key` file to `mycert.key`.
+  </Tab>
+</Tabs>
+
+## What you get
+
+After either method, you have two files:
+
+- `mycert.crt` — the certificate file. This is the public part. You install it as a trusted root in your OS or browser so that connections proxied by Xray are accepted without warnings.
+- `mycert.key` — the private key. This is secret. Xray uses it to decrypt and re-encrypt your traffic. Never share this file with anyone.
+
+<Info>
+If you already generated a certificate on Windows, you can transfer the same `mycert.crt` and `mycert.key` files to your Android device and use them there — no need to generate a new pair.
+</Info>

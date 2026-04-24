@@ -1,0 +1,52 @@
+---
+title: "Install and configure MITM-DomainFronting on Windows"
+description: "Configure MITM-DomainFronting on Windows with v2rayN and Xray-core. Requires a self-signed certificate and the MITM-DomainFronting.json config file."
+---
+
+This page walks you through setting up MITM-DomainFronting on Windows using v2rayN with Xray-core. After completing these steps, your browser will route traffic through the local MITM proxy, allowing direct access to supported services without an external server.
+
+<Note>
+You need `mycert.crt` and `mycert.key` before continuing. See [Generate your personal TLS certificate](/setup/certificate-generation) to create them.
+</Note>
+
+<Steps>
+  <Step title="Download v2rayN">
+    Download the latest `v2rayN-windows-64.zip` from [https://github.com/2dust/v2rayN/releases](https://github.com/2dust/v2rayN/releases) and extract it to a location of your choice.
+  </Step>
+  <Step title="Place the certificate files">
+    Move `certificate_generator.bat` into the `v2rayN-windows-64\bin` folder and run it there. Wait for the script to finish. It creates two files in that same folder:
+
+    - `mycert.crt`
+    - `mycert.key`
+  </Step>
+  <Step title="Install the certificate as a trusted root">
+    You need to tell your OS or browser to trust your certificate. Choose one of the following approaches:
+
+    **System-wide (all browsers that use Windows certificate store):**
+
+    Right-click `mycert.crt` → **Install Certificate** → **Local Machine** → **Place all certificates in the following store** → select **Trusted Root Certification Authorities** → confirm.
+
+    **Chrome only:**
+
+    Settings → **Privacy and security** → **Security** → **Manage certificates** → **Manage imported certificates from Windows** → **Trusted Root Certification Authorities** → **Import** → select `mycert.crt` → **Place all certificates in the following store** → **Trusted Root Certification Authorities**.
+  </Step>
+  <Step title="Import the Xray configuration">
+    Open v2rayN, then go to **Configuration** → **Add a custom configuration**.
+
+    - Choose any name for the configuration.
+    - Import `MITM-DomainFronting.json`.
+    - Set **Core type** to **xray**.
+    - Leave **Socks port** empty.
+  </Step>
+  <Step title="Activate the proxy">
+    Select the configuration you just added, then click **Set system proxy**.
+  </Step>
+</Steps>
+
+<Check>
+Setup is complete. Open the browser where you installed the certificate (or any browser if you installed to **Local Machine**) and start browsing.
+</Check>
+
+<Note>
+This configuration requires Xray-core version 26.2.6 or later. The minimum version is specified in the `version.min` field of `MITM-DomainFronting.json`.
+</Note>

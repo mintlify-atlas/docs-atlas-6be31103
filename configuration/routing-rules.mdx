@@ -1,0 +1,73 @@
+---
+title: "Understanding MITM-DomainFronting routing rules"
+description: "How MITM-DomainFronting routes traffic: which connections go through Domain Fronting, which go direct, and which are blocked via geosite and port matching."
+---
+
+The routing rules are the decision engine of MITM-DomainFronting. Every connection that enters through the `mixed-in` proxy is evaluated against these rules in order, top to bottom, and the first match determines where the traffic goes. Some connections are sent through the two-phase MITM pipeline for Domain Fronting, some go directly to the internet, and some are blocked outright.
+
+## Routing rules table
+
+The `domainStrategy` is set to `"AsIs"`, meaning Xray matches domain rules against the raw domain name without resolving it to an IP first.
+
+| Priority | Match condition | Action / outbound | Purpose |
+|---|---|---|---|
+| 1 | Domain: `geosite:category-ads-all` | `block` | Drop all known ad domains |
+| 2 | Inbound: `dns_inbound`, port `53` | `direct` | DNS engine's own queries go direct, not through `dns-out` |
+| 3 | Port `53` | `dns-out` | All other DNS queries go through Xray's DNS subsystem |
+| 4 | Domain: `domain:ir`, `geosite:private`, `geosite:category-ir` | `direct` | Iranian and private domains bypass the proxy |
+| 5 | IP: `geoip:private`, `geoip:ir` | `direct` | Private and Iranian IP ranges bypass the proxy |
+| 6 | Inbound: `tls-decrypt-h11`, domain: `domain:googlevideo.com` | `tls-repack-google-h11` | Phase 2 — re-encrypt decrypted googlevideo traffic with spoofed SNI |
+| 7 | Inbound: `tls-decrypt-h211`, domain: `geosite:google` | `tls-repack-google-h211` | Phase 2 — re-encrypt decrypted Google service traffic with spoofed SNI |
+| 8 | Network: `tcp`, port `443`, domain: `domain:googlevideo.com` | `redirect-out-h11` | Phase 1 — redirect googlevideo HTTPS to local MITM inbound on port `11666` |
+| 9 | Network: `tcp`, port `443`, domain: `geosite:google` | `redirect-out-h211` | Phase 1 — redirect Google service HTTPS to local MITM inbound on port `11777` |
+| 10 | Port `0-65535` (catch-all) | `direct` | All unmatched traffic goes direct |
+
+## MITM pipeline routing (two-phase)
+
+Google traffic goes through a two-phase routing process. The rules are intentionally ordered so that Phase 1 redirects happen before Phase 2 re-encryption — but Phase 2 rules appear earlier in the list because they match on a narrower condition (specific inbound tag) that only becomes relevant after Phase 1 completes.
+
+**Phase 1 — TLS interception (rules 8 and 9)**
+
+When your browser makes an HTTPS connection to a Google domain, it hits one of these redirect rules first:
+
+- TCP/443 to `googlevideo.com` → `redirect-out-h11` → sends the connection to `127.0.0.1:11666` (`tls-decrypt-h11` inbound)
+- TCP/443 to `geosite:google` → `redirect-out-h211` → sends the connection to `127.0.0.1:11777` (`tls-decrypt-h211` inbound)
+
+Xray's MITM inbound terminates the TLS session using your locally-trusted CA certificate, giving Xray access to the plaintext request.
+
+**Phase 2 — Domain Fronting re-encryption (rules 6 and 7)**
+
+After the MITM inbound decrypts the connection, it re-enters the routing engine as a new connection tagged with either `tls-decrypt-h11` or `tls-decrypt-h211` as the inbound source. Rules 6 and 7 match on this inbound tag and forward the traffic to the appropriate re-packing outbound:
+
+- From `tls-decrypt-h11` + `googlevideo.com` → `tls-repack-google-h11` (HTTP/1.1, Domain Fronting SNI)
+- From `tls-decrypt-h211` + `geosite:google` → `tls-repack-google-h211` (HTTP/2, Domain Fronting SNI)
+
+The re-packing outbounds re-encrypt the traffic with `serverName: "www.google.com"` — the SNI that censorship infrastructure sees — while actually delivering the traffic to Google's real servers.
+
+<Note>
+Rules 6 and 7 must appear before rules 8 and 9 in the list. If the order were reversed, newly decrypted traffic from the MITM inbound would re-match the Phase 1 redirect rules and loop indefinitely.
+</Note>
+
+## Direct traffic
+
+Rules 4 and 5 send Iranian and private network traffic directly to its destination, bypassing the MITM pipeline entirely:
+
+- **Rule 4** — Domains matching `.ir` TLD, `geosite:private` (RFC 1918 and loopback), and `geosite:category-ir` (Iranian websites) go `direct`.
+- **Rule 5** — IP addresses in `geoip:private` (private ranges) and `geoip:ir` (Iranian IP allocations) go `direct`.
+
+This prevents unnecessary latency for local and domestic traffic, and avoids routing private network requests through the proxy stack.
+
+## Ad blocking
+
+Rule 1 is evaluated first. Any domain that belongs to `geosite:category-ads-all` — a curated list of advertising, tracking, and telemetry domains — is sent to the `block` outbound, which silently drops the connection. The DNS `hosts` entry also maps these domains to `"#3"` (an invalid address) for an additional layer of blocking at the resolution stage.
+
+## DNS handling
+
+DNS traffic requires special treatment to avoid a routing loop:
+
+- **Rule 2** — DNS queries that originate from Xray's own DNS engine (tagged `dns_inbound`) and target port `53` are sent `direct`. This prevents the DNS engine's outgoing lookups from re-entering `dns-out` and looping.
+- **Rule 3** — All other port `53` traffic goes to `dns-out`, which processes DNS queries through Xray's DNS subsystem (rejecting non-IP query types and blocking QTYPE 0 and 65).
+
+## Default rule
+
+Rule 10 is a catch-all that matches every port from `0` to `65535`. Any connection that didn't match a more specific rule above goes `direct` to the internet. This ensures that traffic to services outside the Google domains covered by the MITM pipeline (such as other websites or apps) continues to work without interruption.

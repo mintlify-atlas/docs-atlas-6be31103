@@ -1,0 +1,54 @@
+---
+title: "Supported Google services and known limitations"
+description: "Which Google services work with MITM-DomainFronting, which are partially supported, and which are unavailable due to technical or policy restrictions."
+---
+
+This page lists what you can and cannot access using MITM-DomainFronting, so you know what to expect before and after setup. The method works by intercepting and re-routing specific traffic — not all traffic — which means coverage is intentionally limited to certain services.
+
+<Info>
+  This method does not provide full internet access. It specifically enables certain Google services for users on restricted networks.
+</Info>
+
+## Supported services
+
+The following services are accessible through MITM-DomainFronting. All traffic matching `geosite:google` is routed through the H2+H1.1 pipeline, while `googlevideo.com` uses the H1.1 pipeline.
+
+| Service | Status | Notes |
+|---|---|---|
+| Google Meet | Supported | Use via browser on Android (non-rooted) |
+| Google Drive | Supported | Use via browser on Android (non-rooted) |
+| Google Docs, Sheets, Slides | Supported | Part of `geosite:google` |
+| Google Search | Supported | Part of `geosite:google` |
+| Gmail | Supported | Part of `geosite:google` |
+| Google Calendar | Supported | Part of `geosite:google` |
+| General Google services | Supported | All domains in `geosite:google` |
+| Google Video CDN / `googlevideo.com` | Supported | Routed via HTTP/1.1 pipeline |
+
+## Not supported or limited
+
+Some services are unavailable due to infrastructure differences or IP-level restrictions that Domain Fronting cannot bypass.
+
+- **YouTube videos** — Not supported. YouTube video delivery uses a separate CDN infrastructure that this method does not cover. The `googlevideo.com` routing handles partial CDN access, but full YouTube video streaming is not guaranteed.
+- **Google Gemini** — Not accessible. Gemini blocks Iranian IP addresses at the IP level, not just via SNI. Domain Fronting bypasses SNI-based filtering only; it cannot bypass IP-level blocks.
+- **Standalone Android apps (Google Meet app, Google Drive app)** — Cannot use this method on non-rooted Android. Standalone apps do not route through the proxy tunnel for TLS inspection. Use Google Meet or Google Drive in your browser instead.
+- **Any service that blocks Iranian IPs directly** — Out of scope for this technique. Domain Fronting addresses SNI-based censorship, not IP-based bans.
+
+## Platform and browser support
+
+<AccordionGroup>
+  <Accordion title="Windows">
+    Works system-wide or per-browser depending on where you install the certificate. Install to **Local Machine** → **Trusted Root Certification Authorities** for system-wide coverage, or import into a specific browser's certificate store.
+  </Accordion>
+  <Accordion title="Android (no root)">
+    Works in Chrome and Chromium-based browsers. Firefox requires an extra step: go to **Settings** → **About Firefox** → tap the Firefox logo five times → **Settings** → **Secret Settings** → enable **Use third party CA certificates**.
+
+    Standalone apps do **not** work on non-rooted Android — use your browser to access Google Meet, Google Drive, and other services instead.
+  </Accordion>
+  <Accordion title="Linux and macOS">
+    Supported. The configuration is the same as on other platforms — import `MITM-DomainFronting.json` into your v2ray-compatible client and install the certificate into your system's trusted root store or browser.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  As new services become accessible with this method, the project will be updated. Check the [GitHub repository](https://github.com/patterniha/MITM-DomainFronting) for the latest config files and announcements.
+</Note>
